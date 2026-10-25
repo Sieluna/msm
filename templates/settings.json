@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "memory_min": "1G",
+  "memory_max": "4G",
+  "startup_timeout": 300
+}

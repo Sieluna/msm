@@ -1,0 +1,3 @@
+- Default: `wget -qO- https://github.com/Sieluna/msm/releases/latest/download/install.sh | sudo bash -s -- --accept-eula`
+- Fabric: `wget -qO- https://github.com/Sieluna/msm/releases/latest/download/install.sh | sudo bash -s -- --accept-eula --loader fabric`
+- NeoForge: `wget -qO- https://github.com/Sieluna/msm/releases/latest/download/install.sh | sudo bash -s -- --accept-eula --loader neoforge`

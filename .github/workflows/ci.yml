@@ -1,0 +1,110 @@
+name: CI and release
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  auth:
+    name: Build and test auth
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+          cache-dependency-path: |
+            auth/**/*.gradle
+            auth/gradle/wrapper/gradle-wrapper.properties
+      - name: Test storage and build both loaders
+        run: bash auth/gradlew -p auth --no-daemon :core:test bundleAuth
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: auth-distribution
+          path: auth/dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    name: Regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jq curl wget xmlstarlet unzip zip acl
+      - name: Run regression and release tests
+        run: sudo bash tests/run.sh
+
+  smoke:
+    name: Minecraft and auth integration (${{ matrix.loader }})
+    needs: [test, auth]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        loader: [vanilla, fabric, neoforge]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: auth-distribution
+          path: auth/dist
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        if: matrix.loader != 'vanilla'
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install and boot the selected server
+        run: sudo bash tests/smoke.sh "${{ matrix.loader }}" "$JAVA_HOME/bin/java"
+      - name: Show Minecraft diagnostics on failure
+        if: failure()
+        run: |
+          sudo systemctl status minecraft.service --no-pager || true
+          sudo journalctl -u minecraft.service -n 200 --no-pager || true
+
+  release:
+    name: Publish release
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [test, auth, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: auth-distribution
+          path: auth/dist
+      - name: Package tested runtime and installer
+        run: bash .github/scripts/package.sh "$RUNNER_TEMP/msm-release"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: bash .github/scripts/publish-release.sh "$RUNNER_TEMP/msm-release"

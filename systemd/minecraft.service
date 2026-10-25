@@ -1,0 +1,38 @@
+# Managed by msm. This is the only Minecraft service unit.
+[Unit]
+Description=Minecraft Server
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=minecraft
+Group=minecraft
+WorkingDirectory=/srv/minecraft/server
+ExecStartPre=+/usr/local/lib/msm/libexec/guard.sh
+ExecStart=/usr/local/lib/msm/libexec/launch.sh
+Environment=HOME=/srv/minecraft/server
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+UnsetEnvironment=JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS CLASSPATH BASH_ENV ENV SHELLOPTS BASHOPTS CDPATH GLOBIGNORE
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGINT
+KillMode=control-group
+TimeoutStopSec=300
+SendSIGKILL=no
+SuccessExitStatus=0 130 143
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/srv/minecraft/server
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+shopt -s inherit_errexit
+export LC_ALL=C
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+unset BASH_ENV ENV CDPATH JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS CLASSPATH
+MSM_CODE_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+for msm_module in common http catalog mods service archive runtime transaction install commands; do
+    source "$MSM_CODE_ROOT/lib/$msm_module.sh"
+done
+MSM_LOCK_HELD=false
+
+msm_exit_handler() {
+    local result=$1 phase=
+    trap - EXIT INT TERM
+    if [[ $result != 0 && $MSM_LOCK_HELD == true && -f $MSM_JOURNAL ]]; then
+        rm -f -- "$MSM_RUN/permit.json"
+        phase=$(jq -r '.phase // "unknown"' "$MSM_JOURNAL" 2>/dev/null) || phase=unknown
+        case $phase in
+            applying|starting|restoring|rollback_starting) (msm_service_stop any) >/dev/null 2>&1 || true ;;
+        esac
+        msm_log "Operation failed in phase '$phase'. Its journal and backups were preserved."
+        msm_log 'Fix the reported problem, then run: sudo msm recover'
+    fi
+    if [[ -n $MSM_WORK && -d $MSM_WORK && ! -L $MSM_WORK ]]; then
+        if [[ ! -f $MSM_JOURNAL ]] || ! jq -e --arg work "$MSM_WORK/" '.payload? | type == "string" and startswith($work)' "$MSM_JOURNAL" >/dev/null 2>&1; then
+            rm -rf -- "$MSM_WORK"
+        fi
+    fi
+    exit "$result"
+}
+trap 'msm_exit_handler "$?"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [[ ${1:-} == --locked ]]; then
+    shift
+    msm_require_root
+    msm_have_lock "$$" || msm_die 'The internal locked entry requires the real management lock.'
+    MSM_LOCK_HELD=true
+fi
+case ${1:---help} in
+    --help|-h) msm_usage; exit 0 ;;
+    --version) printf '%s\n' "$MSM_VERSION"; exit 0 ;;
+esac
+if [[ ${2:-} == --help || ${2:-} == -h ]]; then
+    if [[ $1 == install ]]; then msm_install_usage; else msm_usage; fi
+    exit 0
+fi
+msm_require_tools
+case $1 in
+    plan) ;;
+    *) msm_require_root ;;
+esac
+case $1:${2:-} in
+    plan:*|status:*|logs:*|backups:*|mods:list) ;;
+    *)
+        if [[ $MSM_LOCK_HELD == false ]]; then
+            msm_directory "$MSM_STATE" 700
+            [[ ! -L $MSM_LOCK ]] || msm_die 'Management lock is a symlink.'
+            if [[ -e $MSM_LOCK ]]; then msm_trusted_file "$MSM_LOCK"; else (umask 077; : >"$MSM_LOCK"); fi
+            exec flock -n -E 75 -F "$MSM_LOCK" /bin/bash "$MSM_CODE_ROOT/bin/msm" --locked "$@"
+        fi
+        case $1 in install|recover) ;; *) msm_idle ;; esac
+        ;;
+esac
+msm_dispatch "$@"

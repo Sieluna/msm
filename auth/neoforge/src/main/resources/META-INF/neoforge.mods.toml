@@ -1,0 +1,22 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+[[mods]]
+modId="auth"
+version="${version}"
+displayName="Auth"
+description="Server-side password authentication for Minecraft 26.3."
+[[mixins]]
+config="auth.mixins.json"
+[[dependencies.auth]]
+modId="neoforge"
+type="required"
+versionRange="[26.3.0.98,)"
+ordering="NONE"
+side="SERVER"
+[[dependencies.auth]]
+modId="minecraft"
+type="required"
+versionRange="[26.3]"
+ordering="NONE"
+side="SERVER"

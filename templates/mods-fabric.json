@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "loader": "fabric",
+  "auth": true,
+  "mods": [
+    {"project": "fabric-api", "enabled": true, "version": null, "note": "Fabric mod API"},
+    {"project": "ferrite-core", "enabled": true, "version": null, "note": "Memory optimization"},
+    {"project": "lithium", "enabled": true, "version": null, "note": "Game logic optimization"},
+    {"project": "servercore", "enabled": true, "version": null, "note": "Server performance optimization"},
+    {"project": "worldedit", "enabled": true, "version": null, "note": "World editing mod"},
+    {"project": "krypton", "enabled": true, "version": null, "note": "Network optimization"}
+  ]
+}

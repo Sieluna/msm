@@ -1,0 +1,41 @@
+allprojects {
+    group = 'dev.sieluna.auth'
+    version = '0.1.0'
+    repositories { mavenCentral() }
+}
+
+tasks.register('bundleAuth') {
+    dependsOn ':fabric:jar', ':neoforge:jar'
+    inputs.files(provider { ['fabric', 'neoforge'].collect { project(":${it}").tasks.named('jar').get().archiveFile.get().asFile } })
+    inputs.property 'authVersion', project.version
+    outputs.dir layout.projectDirectory.dir('dist')
+    doLast {
+        def destination = layout.projectDirectory.dir('dist').asFile
+        destination.mkdirs()
+        def records = ['fabric', 'neoforge'].collect { loader ->
+            def source = project(":${loader}").tasks.named('jar').get().archiveFile.get().asFile
+            def filename = "auth-${loader}-26.3.jar"
+            copy { from source; into destination; rename { filename } }
+            def digest = java.security.MessageDigest.getInstance('SHA-512').digest(source.bytes).encodeHex().toString()
+            [loader: loader, filename: filename, size: source.length(), sha512: digest]
+        }
+        def manifest = [schema: 1, mc: '26.3', version: project.version.toString(), mods: records]
+        new File(destination, 'auth-manifest.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest)) + '\n'
+    }
+}
+subprojects {
+    apply plugin: 'java-library'
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(25)
+        withSourcesJar()
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 25
+        options.encoding = 'UTF-8'
+    }
+    tasks.withType(Test).configureEach { useJUnitPlatform() }
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+}
